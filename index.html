@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Study RPG</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --card: #1b1f3b;
+      --accent: #7c9cff;
+      --good: #6cff9c;
+      --bad: #ff6c6c;
+      --text: #e9ebff;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin: 0; background: linear-gradient(120deg, #0f1220, #12163a); color: var(--text); }
+    header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 22px; margin: 0; }
+    main { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .hidden { display: none; }
+    button { background: var(--accent); color: #0b0e1a; border: none; border-radius: 12px; padding: 10px 14px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid #2b2f66; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #2b2f66; background: #0c1030; color: var(--text); }
+    .pill { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #2b2f66; font-size: 12px; }
+    .good { color: var(--good); }
+    .bad { color: var(--bad); }
+    .center { text-align: center; }
+    .spacer { height: 12px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📘 Study RPG</h1>
+    <div id="userBar" class="pill hidden"></div>
+  </header>
+
+  <main>
+    <!-- LOGIN -->
+    <section id="login" class="card">
+      <h2>Sign Up</h2>
+      <p class="pill">Username-only (temporary)</p>
+      <div class="spacer"></div>
+      <input id="username" placeholder="Choose a username" />
+      <div class="spacer"></div>
+      <button onclick="signup()">Enter</button>
+    </section>
+
+    <!-- TEMP SCREEN -->
+    <section id="temp" class="card hidden center">
+      <h2>⚔️ Welcome, Adventurer!</h2>
+      <p>This is a temporary screen.</p>
+      <p>From here, you’ll later go to flashcards, quests, and battles.</p>
+      <div class="spacer"></div>
+      <button onclick="goToStudy()">Continue</button>
+    </section>
+
+    <!-- FLASHCARDS -->
+    <section id="study" class="card hidden">
+      <h2>Flashcards</h2>
+      <p>Answer all cards once to unlock the RPG challenge.</p>
+      <div class="spacer"></div>
+      <div class="center">
+        <h3 id="question"></h3>
+        <div class="spacer"></div>
+        <input id="answer" placeholder="Your answer" />
+        <div class="spacer"></div>
+        <button onclick="submitAnswer()">Submit</button>
+        <p id="feedback"></p>
+      </div>
+      <div class="spacer"></div>
+      <div class="center"><span id="progress" class="pill"></span></div>
+    </section>
+
+    <!-- GAME -->
+    <section id="game" class="card hidden">
+      <h2>RPG Challenge</h2>
+      <p>Defeat the monster by answering questions correctly.</p>
+      <div class="spacer"></div>
+      <div class="row">
+        <div class="card">
+          <h3>🧙 Player</h3>
+          <p>HP: <span id="playerHP">10</span></p>
+        </div>
+        <div class="card">
+          <h3>🐉 Monster</h3>
+          <p>HP: <span id="monsterHP">10</span></p>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="center">
+        <h3 id="battleQ"></h3>
+        <input id="battleA" placeholder="Answer" />
+        <div class="spacer"></div>
+        <button onclick="battleTurn()">Attack</button>
+        <p id="battleLog"></p>
+      </div>
+    </section>
+
+    <!-- REWARDS -->
+    <section id="rewards" class="card hidden center">
+      <h2>🎉 Victory!</h2>
+      <p>You earned a badge:</p>
+      <h3>🏅 Novice Scholar</h3>
+      <button onclick="resetRun()">Study Again</button>
+    </section>
+  </main>
+
+  <script>
+    // ---------------- BASIC STATE ----------------
+    const flashcards = [
+      { q: 'What is 2 + 2?', a: '4' },
+      { q: 'Capital of France?', a: 'paris' },
+      { q: 'What does HTML stand for?', a: 'hypertext markup language' }
+    ];
+
+    let state = {
+      user: null,
+      index: 0,
+      completed: false,
+      answered: new Set(),
+      lastSubmit: 0, // anti-spam (very basic)
+      playerHP: 10,
+      monsterHP: 10
+    };
+
+    // ---------------- SIGN UP ----------------
+    function signup() {
+      const u = document.getElementById('username').value.trim();
+      if (!u) return alert('Please choose a username');
+
+      state.user = u;
+      localStorage.setItem('studyRPG_user', u);
+
+      document.getElementById('login').classList.add('hidden');
+      document.getElementById('temp').classList.remove('hidden');
+      document.getElementById('userBar').classList.remove('hidden');
+      document.getElementById('userBar').innerText = `👤 ${u}`;
+    }
+
+    function goToStudy() {
+      document.getElementById('temp').classList.add('hidden');
+      document.getElementById('study').classList.remove('hidden');
+      loadCard();
+    }
+
+    // ---------------- FLASHCARDS ----------------
+    function loadCard() {
+      const card = flashcards[state.index];
+      document.getElementById('question').innerText = card.q;
+      document.getElementById('answer').value = '';
+      document.getElementById('feedback').innerText = '';
+      document.getElementById('progress').innerText = `${state.answered.size}/${flashcards.length} completed`;
+    }
+
+    function submitAnswer() {
+      const now = Date.now();
+      if (now - state.lastSubmit < 800) return; // basic anti-spam / anti-cheat
+      state.lastSubmit = now;
+
+      const input = document.getElementById('answer').value.trim().toLowerCase();
+      const card = flashcards[state.index];
+
+      if (input === card.a) {
+        state.answered.add(state.index);
+        document.getElementById('feedback').innerText = 'Correct!';
+        document.getElementById('feedback').className = 'good';
+        state.index = (state.index + 1) % flashcards.length;
+      } else {
+        document.getElementById('feedback').innerText = 'Try again.';
+        document.getElementById('feedback').className = 'bad';
+      }
+
+      if (state.answered.size === flashcards.length) {
+        unlockGame();
+      } else {
+        loadCard();
+      }
+    }
+
+    function unlockGame() {
+      document.getElementById('study').classList.add('hidden');
+      document.getElementById('game').classList.remove('hidden');
+      nextBattleQ();
+    }
+
+    // ---------------- RPG GAME ----------------
+    function nextBattleQ() {
+      const card = flashcards[Math.floor(Math.random() * flashcards.length)];
+      document.getElementById('battleQ').innerText = card.q;
+      document.getElementById('battleQ').dataset.answer = card.a;
+      document.getElementById('battleA').value = '';
+    }
+
+    function battleTurn() {
+      const a = document.getElementById('battleA').value.trim().toLowerCase();
+      const correct = document.getElementById('battleQ').dataset.answer;
+
+      if (a === correct) {
+        state.monsterHP -= 2;
+        document.getElementById('battleLog').innerText = 'Hit! You dealt damage.';
+      } else {
+        state.playerHP -= 2;
+        document.getElementById('battleLog').innerText = 'Miss! The monster strikes back.';
+      }
+
+      document.getElementById('playerHP').innerText = state.playerHP;
+      document.getElementById('monsterHP').innerText = state.monsterHP;
+
+      if (state.monsterHP <= 0) return win();
+      if (state.playerHP <= 0) return lose();
+      nextBattleQ();
+    }
+
+    function win() {
+      document.getElementById('game').classList.add('hidden');
+      document.getElementById('rewards').classList.remove('hidden');
+    }
+
+    function lose() {
+      alert('You were defeated. Study and try again!');
+      resetRun();
+    }
+
+    function resetRun() {
+      state.index = 0;
+      state.answered.clear();
+      state.playerHP = 10;
+      state.monsterHP = 10;
+      document.getElementById('rewards').classList.add('hidden');
+      document.getElementById('study').classList.remove('hidden');
+      loadCard();
+    }
+
+    // Auto-login if stored
+    const saved = localStorage.getItem('studyRPG_user');
+    if (saved) {
+      document.getElementById('username').value = saved;
+    }
+  </script>
+</body>
+</html>
