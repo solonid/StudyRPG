@@ -32,6 +32,20 @@
     .spacer { height: 12px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+  </script>
 </head>
 <body>
   <header>
@@ -115,55 +129,50 @@
   </main>
 
   <script>
-    // ---------------- STATE ----------------
     const flashcards = [
       { q: 'What is 2 + 2?', a: '4' },
       { q: 'Capital of France?', a: 'paris' },
       { q: 'What does HTML stand for?', a: 'hypertext markup language' }
     ];
 
-    let state = {
-      user: null,
-      index: 0,
-      answered: new Set(),
-      lastSubmit: 0,
-      playerHP: 10,
-      monsterHP: 10
-    };
+    let state = { index: 0, answered: new Set(), playerHP: 10, monsterHP: 10, user: null };
 
-    // ---------------- SIGN UP / LOGIN ----------------
+    // ---------------- Firebase Auth ----------------
     function signupOrLogin() {
       const u = document.getElementById('username').value.trim();
       const p = document.getElementById('password').value;
       const stay = document.getElementById('stayLoggedIn').checked;
       if (!u || !p) return alert('Enter both username and password');
 
-      // Store credentials locally (not secure, frontend only)
-      let users = JSON.parse(localStorage.getItem('studyRPG_users') || '{}');
-      if (!users[u]) users[u] = p; // new user
-      else if (users[u] !== p) return alert('Password incorrect');
+      const email = u + '@example.com';
 
-      localStorage.setItem('studyRPG_users', JSON.stringify(users));
-      state.user = u;
+      firebase.auth().signInWithEmailAndPassword(email, p)
+        .then(() => {
+          showTempScreen(u);
+          if (stay) localStorage.setItem('studyRPG_stay', u);
+        })
+        .catch((error) => {
+          if (error.code === 'auth/user-not-found') {
+            firebase.auth().createUserWithEmailAndPassword(email, p)
+              .then(() => showTempScreen(u))
+              .catch(err => alert(err.message));
+          } else {
+            alert(error.message);
+          }
+        });
+    }
 
-      if (stay) localStorage.setItem('studyRPG_stay', u);
-      else localStorage.removeItem('studyRPG_stay');
-
+    function showTempScreen(username) {
+      state.user = username;
       document.getElementById('login').classList.add('hidden');
       document.getElementById('temp').classList.remove('hidden');
       document.getElementById('userBar').classList.remove('hidden');
-      document.getElementById('userBar').innerText = `👤 ${u}`;
+      document.getElementById('userBar').innerText = `👤 ${username}`;
     }
 
-    // Auto-login if 'stay logged in' is set
-    const savedUser = localStorage.getItem('studyRPG_stay');
-    if (savedUser) {
-      state.user = savedUser;
-      document.getElementById('login').classList.add('hidden');
-      document.getElementById('temp').classList.remove('hidden');
-      document.getElementById('userBar').classList.remove('hidden');
-      document.getElementById('userBar').innerText = `👤 ${savedUser}`;
-    }
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) showTempScreen(user.email.split('@')[0]);
+    });
 
     function goToStudy() {
       document.getElementById('temp').classList.add('hidden');
@@ -172,19 +181,15 @@
     }
 
     // ---------------- FLASHCARDS ----------------
-    let loadCard = () => {
+    function loadCard() {
       const card = flashcards[state.index];
       document.getElementById('question').innerText = card.q;
       document.getElementById('answer').value = '';
       document.getElementById('feedback').innerText = '';
       document.getElementById('progress').innerText = `${state.answered.size}/${flashcards.length} completed`;
-    };
+    }
 
     function submitAnswer() {
-      const now = Date.now();
-      if (now - state.lastSubmit < 800) return;
-      state.lastSubmit = now;
-
       const input = document.getElementById('answer').value.trim().toLowerCase();
       const card = flashcards[state.index];
 
@@ -220,13 +225,8 @@
       const a = document.getElementById('battleA').value.trim().toLowerCase();
       const correct = document.getElementById('battleQ').dataset.answer;
 
-      if (a === correct) {
-        state.monsterHP -= 2;
-        document.getElementById('battleLog').innerText = 'Hit! You dealt damage.';
-      } else {
-        state.playerHP -= 2;
-        document.getElementById('battleLog').innerText = 'Miss! The monster strikes back.';
-      }
+      if (a === correct) state.monsterHP -= 2;
+      else state.playerHP -= 2;
 
       document.getElementById('playerHP').innerText = state.playerHP;
       document.getElementById('monsterHP').innerText = state.monsterHP;
